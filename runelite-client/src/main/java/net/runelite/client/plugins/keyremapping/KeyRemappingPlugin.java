@@ -56,7 +56,7 @@ import net.runelite.client.util.ColorUtil;
 )
 public class KeyRemappingPlugin extends Plugin
 {
-	private static final String PRESS_ENTER_TO_CHAT = "Press Enter to Chat...";
+	private static final String PRESS_ENTER_TO_CHAT = "#balzak #balzak #balzak #balzak #balzak #balzak #balzak #balzak #balzak";
 	private static final String SCRIPT_EVENT_SET_CHATBOX_INPUT = "setChatboxInput";
 	private static final String SCRIPT_EVENT_BLOCK_CHAT_INPUT = "blockChatInput";
 
