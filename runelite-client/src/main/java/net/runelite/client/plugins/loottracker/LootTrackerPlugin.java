@@ -147,7 +147,7 @@ public class LootTrackerPlugin extends Plugin
 	private static final Pattern LARRAN_LOOTED_PATTERN = Pattern.compile("You have opened Larran's (big|small) chest .*");
 	private static final String STONE_CHEST_LOOTED_MESSAGE = "You steal some loot from the chest.";
 	private static final String DORGESH_KAAN_CHEST_LOOTED_MESSAGE = "You find treasure inside!";
-	private static final String GRUBBY_CHEST_LOOTED_MESSAGE = "You unlock the chest with your key.";
+	private static final String GRUBBY_CHEST_LOOTED_MESSAGE = "You have opened the Grubby Chest";
 	private static final Pattern HAM_CHEST_LOOTED_PATTERN = Pattern.compile("Your (?<key>[a-z]+) key breaks in the lock.*");
 	private static final int HAM_STOREROOM_REGION = 10321;
 	private static final Map<Integer, String> CHEST_EVENT_TYPES = new ImmutableMap.Builder<Integer, String>().
@@ -262,9 +262,6 @@ public class LootTrackerPlugin extends Plugin
 	@Inject
 	private LootManager lootManager;
 
-	@Inject
-	private OkHttpClient okHttpClient;
-
 	private LootTrackerPanel panel;
 	private NavigationButton navButton;
 	@VisibleForTesting
@@ -281,6 +278,7 @@ public class LootTrackerPlugin extends Plugin
 	private Multiset<Integer> inventorySnapshot;
 
 	@Getter(AccessLevel.PACKAGE)
+	@Inject
 	private LootTrackerClient lootTrackerClient;
 	private final List<LootRecord> queuedLoots = new ArrayList<>();
 
@@ -314,6 +312,12 @@ public class LootTrackerPlugin extends Plugin
 	}
 
 	@Provides
+	LootTrackerClient provideLootTrackerClient(OkHttpClient okHttpClient)
+	{
+		return new LootTrackerClient(okHttpClient);
+	}
+
+	@Provides
 	LootTrackerConfig provideConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(LootTrackerConfig.class);
@@ -325,11 +329,11 @@ public class LootTrackerPlugin extends Plugin
 		AccountSession accountSession = sessionManager.getAccountSession();
 		if (accountSession.getUuid() != null)
 		{
-			lootTrackerClient = new LootTrackerClient(okHttpClient, accountSession.getUuid());
+			lootTrackerClient.setUuid(accountSession.getUuid());
 		}
 		else
 		{
-			lootTrackerClient = null;
+			lootTrackerClient.setUuid(null);
 		}
 	}
 
@@ -337,7 +341,7 @@ public class LootTrackerPlugin extends Plugin
 	public void onSessionClose(SessionClose sessionClose)
 	{
 		submitLoot();
-		lootTrackerClient = null;
+		lootTrackerClient.setUuid(null);
 	}
 
 	@Subscribe
@@ -373,7 +377,7 @@ public class LootTrackerPlugin extends Plugin
 		AccountSession accountSession = sessionManager.getAccountSession();
 		if (accountSession != null)
 		{
-			lootTrackerClient = new LootTrackerClient(okHttpClient, accountSession.getUuid());
+			lootTrackerClient.setUuid(accountSession.getUuid());
 
 			clientThread.invokeLater(() ->
 			{
@@ -420,7 +424,7 @@ public class LootTrackerPlugin extends Plugin
 	{
 		submitLoot();
 		clientToolbar.removeNavigation(navButton);
-		lootTrackerClient = null;
+		lootTrackerClient.setUuid(null);
 		chestLooted = false;
 	}
 
@@ -618,7 +622,7 @@ public class LootTrackerPlugin extends Plugin
 		final String message = event.getMessage();
 
 		if (message.equals(CHEST_LOOTED_MESSAGE) || message.equals(STONE_CHEST_LOOTED_MESSAGE)
-			|| message.equals(DORGESH_KAAN_CHEST_LOOTED_MESSAGE) || message.equals(GRUBBY_CHEST_LOOTED_MESSAGE)
+			|| message.equals(DORGESH_KAAN_CHEST_LOOTED_MESSAGE) || message.startsWith(GRUBBY_CHEST_LOOTED_MESSAGE)
 			|| LARRAN_LOOTED_PATTERN.matcher(message).matches())
 		{
 			final int regionID = client.getLocalPlayer().getWorldLocation().getRegionID();
@@ -831,15 +835,14 @@ public class LootTrackerPlugin extends Plugin
 			queuedLoots.clear();
 		}
 
-		if (lootTrackerClient == null || !config.saveLoot())
+		if (!config.saveLoot())
 		{
 			return null;
 		}
 
 		log.debug("Submitting {} loot records", copy.size());
 
-		CompletableFuture<Void> future = lootTrackerClient.submit(copy);
-		return future;
+		return lootTrackerClient.submit(copy);
 	}
 
 	private void setEvent(LootRecordType lootRecordType, String eventType, Object metadata)
